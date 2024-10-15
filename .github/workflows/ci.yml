@@ -1,0 +1,44 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main  # 배포할 브랜치
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Build Docker image
+        run: |
+          docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/my-dnd-app .
+
+      - name: Push Docker image to Google Container Registry
+        run: |
+          echo "${{ secrets.GCP_SA_KEY }}" | base64 --decode > ${HOME}/gcp-key.json
+          gcloud auth activate-service-account --key-file ${HOME}/gcp-key.json
+          gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/my-dnd-app
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy my-dnd-app \
+            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/my-dnd-app \
+            --platform managed \
+            --region us-central1 \  # 원하는 지역으로 변경
+            --allow-unauthenticated  # 인증 필요 여부에 따라 조정
